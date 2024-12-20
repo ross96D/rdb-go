@@ -1,4 +1,4 @@
-module github.com/ross96D/rdg-go
+module github.com/ross96D/rdb-go
 
 go 1.22.0
 
