@@ -2,6 +2,7 @@ package rdb_test
 
 import (
 	"os"
+	"strings"
 	"testing"
 
 	rdb "github.com/ross96D/rdb-go"
@@ -25,6 +26,7 @@ func Get(db rdb.Database, t *testing.T, key string) []byte {
 func TestDatabase(t *testing.T) {
 	db, err := rdb.New([]byte("test_db"))
 	require.NoError(t, err)
+	defer db.Close()
 	defer os.Remove("test_db")
 
 	db.Set([]byte("key1"), []byte("value1"))
@@ -47,10 +49,22 @@ func TestDatabase(t *testing.T) {
 	assert.Equal(t, []byte("val3"), Get(db, t, "key3"))
 	assert.Equal(t, []byte("val4"), Get(db, t, "key4"))
 
-	db.Remove([]byte("key1"))
-	db.Remove([]byte("key2"))
-	db.Remove([]byte("key3"))
-	db.Remove([]byte("key4"))
+	var count int = 0
+	var keys [][]byte = [][]byte{}
+	var values [][]byte = [][]byte{}
+	db.ForEach(func(b1, b2 []byte) bool {
+		count += 1
+		keys = append(keys, b1)
+		values = append(values, b2)
+		return true
+	})
+	assert.Equal(t, 4, count)
+
+	for i, s := range keys {
+		db.Remove(s)
+		assert.True(t, strings.HasPrefix(string(values[i]), "val"))
+		assert.True(t, strings.HasPrefix(string(s), "key"))
+	}
 
 	_, err = db.Get([]byte("key1"))
 	assert.Error(t, err)
