@@ -18,6 +18,7 @@ extern bool rdb_go_callback(uintptr_t, struct Bytes, struct Bytes);
 import "C"
 import (
 	"errors"
+	"fmt"
 	"runtime/cgo"
 	"unsafe"
 )
@@ -49,33 +50,90 @@ func fromCBytes(b C.struct_Bytes) []byte {
 	return C.GoBytes(unsafe.Pointer(b.ptr), C.int(b.len))
 }
 
+var (
+	ErrCloseDB           = errors.New("database is closed")
+	ErrUnexpectedEOF     = errors.New("unexpected end of file")
+	ErrUnseekable        = errors.New("file is unseekable")
+	ErrBrokenPipe        = errors.New("broken pipe")
+	ErrNotOpenForWriting = errors.New("file not open for writing")
+	ErrLockViolation     = errors.New("lock violation in file")
+	ErrIsDir             = errors.New("database path is directory")
+	ErrOutOfMemory       = errors.New("out of memory")
+	ErrAccessDenied      = errors.New("access denied")
+	ErrUnexpected        = errors.New("unexpected")
+	ErrNotDocumented     = errors.New("error code not documented")
+)
+
+func rdb_error() error {
+	errcode := C.rdb_error_code()
+	switch errcode {
+	case 0:
+		return nil
+	case 1:
+		return ErrCloseDB
+	case 2:
+		return ErrUnexpectedEOF
+	case 50:
+		return ErrUnseekable
+	case 51:
+		return ErrBrokenPipe
+	case 52:
+		return ErrNotOpenForWriting
+	case 53:
+		return ErrLockViolation
+	case 54:
+		return ErrIsDir
+	case 55:
+		return ErrOutOfMemory
+	case 56:
+		return ErrAccessDenied
+	case 99:
+		return ErrUnexpected
+	case 100:
+		return ErrNotDocumented
+	default:
+		return fmt.Errorf("error code %d %w", errcode, ErrNotDocumented)
+	}
+}
+
 type Database struct {
 	pointer unsafe.Pointer
 }
 
 func New(path []byte) (Database, error) {
 	r := C.rdb_open(toCBytes(path))
-	if r.error != nil {
-		return Database{}, errors.New(C.GoString(r.error))
+	if r.database == nil {
+		return Database{}, rdb_error()
 	}
 	return Database{pointer: r.database}, nil
 
 }
 
-func (db Database) Set(key []byte, value []byte) bool {
-	return bool(C.rdb_set(db.pointer, toCBytes(key), toCBytes(value)))
+func (db Database) Set(key []byte, value []byte) error {
+	if !bool(C.rdb_set(db.pointer, toCBytes(key), toCBytes(value))) {
+		return rdb_error()
+	}
+	return nil
 }
 
 func (db Database) Get(key []byte) (AllocatedBytes, error) {
 	ret := C.rdb_get(db.pointer, toCBytes(key))
 	if !ret.valid {
-		return AllocatedBytes{}, ErrNotFound{}
+		err := rdb_error()
+		if err != nil {
+			return AllocatedBytes{}, err
+		} else {
+			return AllocatedBytes{}, ErrNotFound{}
+		}
 	}
 	return AllocatedBytes{Bytes: fromCBytes(ret.bytes)}, nil
 }
 
-func (db Database) Remove(key []byte) bool {
-	return bool(C.rdb_remove(db.pointer, toCBytes(key)))
+func (db Database) Remove(key []byte) error {
+	if !bool(C.rdb_remove(db.pointer, toCBytes(key))) {
+		return rdb_error()
+	}
+	return nil
 }
 
 type GoCallback = func([]byte, []byte) bool
@@ -92,11 +150,14 @@ func rdb_go_callback(handle C.uintptr_t, key C.struct_Bytes, value C.struct_Byte
 // golang object
 //
 // calling a [Database] function inside the body is ilegal behaviour
-func (db Database) ForEach(fn GoCallback) {
+func (db Database) ForEach(fn GoCallback) error {
 	handle := cgo.NewHandle(fn)
 	defer handle.Delete()
 
-	C.rdb_foreach(db.pointer, (unsafe.Pointer)(handle), C.Callback(C.rdb_go_callback))
+	if !bool(C.rdb_foreach(db.pointer, (unsafe.Pointer)(handle), C.Callback(C.rdb_go_callback))) {
+		return rdb_error()
+	}
+	return nil
 }
 
 func (db Database) Close() {

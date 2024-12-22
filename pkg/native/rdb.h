@@ -19,6 +19,8 @@ struct OptionalBytes
     bool valid;
 };
 
+uint64_t rdb_error_code();
+
 struct Result rdb_open(struct Bytes path);
 
 void rdb_close(void* db);
