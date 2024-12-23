@@ -4,7 +4,7 @@ package rdb
 #cgo CFLAGS: -g -Wall
 #cgo linux,arm64 LDFLAGS: ${SRCDIR}/pkg/native/aarch64-linux/librdb.a
 #cgo linux,amd64 LDFLAGS: ${SRCDIR}/pkg/native/x86_64-linux/librdb.a
-#cgo windows,amd64 LDFLAGS: -L${SRCDIR}/pkg/native/x86_64-windows -lrdb
+#cgo windows,amd64 LDFLAGS: -L${SRCDIR}/pkg/native/x86_64-windows -lrdb -lntdll
 #cgo darwin,arm64 LDFLAGS: ${SRCDIR}/pkg/native/aarch64-macos/librdb.a
 #cgo darwin,amd64 LDFLAGS: ${SRCDIR}/pkg/native/x86_64-macos/librdb.a
 
